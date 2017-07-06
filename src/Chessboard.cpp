@@ -1,19 +1,10 @@
 #include <array>
-#include <set>
+#include <deque>
 #include "oxygine-framework.h"
 #include "res.h"
 #include "Cell.h"
 #include "Chessboard.h"
 using namespace oxygine;
-
-struct Vector2Cmp
-{
-    bool operator() (const Vector2& first, const Vector2& second) const
-    {
-        if (first.x != second.x) return first.x < second.x;
-        return first.y < second.y;
-    }
-};
 
 DECLARE_SMART(Cell, spCell)
 
@@ -57,11 +48,6 @@ public:
                 else if (i == 1 || i == 6)
                     piece = new Piece(PieceType::Pawn, i == 1);
 
-                if (i < 2)
-                    _whites.insert(piece.get());
-                else if (i > 5)
-                    _blacks.insert(piece.get());
-
                 if (piece.get() != nullptr)
                 {
                     cell->setPiece(piece);
@@ -78,65 +64,21 @@ public:
         }
     }
 
-    void clickEventHandler(Event* ev)
-    {
-        spCell clickedCell = safeCast<Cell*>(ev->currentTarget.get());
-
-        if (_source.get() == nullptr && clickedCell->getPiece().get() != nullptr)
-        {
-            // Protection from moving opponent's pieces
-            if ((_isWhitesTurn && !clickedCell->getPiece()->isWhite())
-                || (!_isWhitesTurn && clickedCell->getPiece()->isWhite()))
-                return;
-
-            _source = clickedCell;
-            _source->setColor(Color::LawnGreen);
-
-            auto result = getPossibleMoves(_source);
-            log::messageln("Found %d potential moves", result.size());
-            for (auto move : getPossibleMoves(_source))
-            {
-                log::messageln("Move: {%f %f}", move.x, move.y);
-                _cells[move.x][move.y]->setColor(Color::Orange);
-            }
-        }
-        else if (_source.get() != nullptr && _source == clickedCell)
-        {
-            _source->resetColor();
-            _source = nullptr;
-        }
-        else if (_source.get() != nullptr && clickedCell != _source)
-        {
-            if (_target.get() != nullptr) _target->resetColor();
-            _target = clickedCell;
-
-            spPiece piece = _source->getPiece();
-            piece->detach();
-            piece->attachTo(_target);
-            _target->setPiece(_source->getPiece());
-            _source->setPiece(nullptr);
-
-            _source->resetColor();
-            _target->setColor(Color::Cyan);
-
-            _source = nullptr;
-            _isWhitesTurn = !_isWhitesTurn;
-        }
-    }
-
-    std::set<Vector2, Vector2Cmp> getPossibleMoves(spCell cell)
+    const MovesSet& getPossibleMoves(spCell cell)
     {
         spPiece piece = cell->getPiece();
+        if (piece->getPossibleMoves().size() > 0)
+            return piece->getPossibleMoves();
         const Vector2& currentPosition = cell->getCBPosition();
         Vector2 targetPosition;
         spPiece targetCellPiece;
-        std::set<Vector2, Vector2Cmp> possibleMoves;
-        log::messageln("%d", piece->getType());
+        MovesSet possibleMoves;
         if (piece->getType() == PieceType::Pawn)
         {
-            log::messageln("%s", piece->isWhite() ? "true" : "false");
+            //region Pawn
             if (piece->isWhite())
             {
+                log::messageln("White");
                 log::messageln("cPosition: %f %f", currentPosition.x, currentPosition.y);
                 if (currentPosition.x != 7
                         && _cells[currentPosition.x + 1][currentPosition.y]->getPiece().get() == nullptr)
@@ -155,13 +97,14 @@ public:
             }
             else
             {
+                log::messageln("Black");
                 if (currentPosition.x != 0
                         && _cells[currentPosition.x - 1][currentPosition.y]->getPiece().get() == nullptr)
                 {
-                    possibleMoves.insert(currentPosition + Vector2(1, 0));
+                    possibleMoves.insert(currentPosition + Vector2(-1, 0));
                     if (currentPosition.x == 6
                             && _cells[currentPosition.x - 2][currentPosition.y]->getPiece().get() == nullptr)
-                        possibleMoves.insert(currentPosition + Vector2(2, 0));
+                        possibleMoves.insert(currentPosition + Vector2(-2, 0));
                 }
                 if (currentPosition.x != 0 && currentPosition.y > 0
                         && piece->isOpponentsPiece(_cells[currentPosition.x - 1][currentPosition.y - 1]->getPiece()))
@@ -170,139 +113,134 @@ public:
                     && piece->isOpponentsPiece(_cells[currentPosition.x - 1][currentPosition.y + 1]->getPiece()))
                     possibleMoves.insert(currentPosition + Vector2(-1, 1));
             }
+            //endregion
         }
         else if (piece->getType() == PieceType::Knight)
         {
+            //region Knight
             targetPosition = currentPosition + Vector2(2, 1);
-            if (targetPosition.x < 8 && targetPosition.y < 8
+            if (isValidPosition(targetPosition)
                 && ((targetCellPiece = _cells[targetPosition.x][targetPosition.y]->getPiece()).get() == nullptr
                     || piece->isOpponentsPiece(targetCellPiece))) {
                 possibleMoves.insert(targetPosition);
             }
 
             targetPosition = currentPosition + Vector2(1, 2);
-            if (targetPosition.x < 8 && targetPosition.y < 8
+            if (isValidPosition(targetPosition)
                 && ((targetCellPiece = _cells[targetPosition.x][targetPosition.y]->getPiece()).get() == nullptr
                     || piece->isOpponentsPiece(targetCellPiece))) {
                 possibleMoves.insert(targetPosition);
             }
 
             targetPosition = currentPosition + Vector2(-1, 2);
-            if (targetPosition.x >= 0 && targetPosition.y < 8
+            if (isValidPosition(targetPosition)
                 && ((targetCellPiece = _cells[targetPosition.x][targetPosition.y]->getPiece()).get() == nullptr
                     || piece->isOpponentsPiece(targetCellPiece))) {
                 possibleMoves.insert(targetPosition);
             }
 
             targetPosition = currentPosition + Vector2(-2, 1);
-            if (targetPosition.x >= 0 && targetPosition.y < 8
+            if (isValidPosition(targetPosition)
                 && ((targetCellPiece = _cells[targetPosition.x][targetPosition.y]->getPiece()).get() == nullptr
                     || piece->isOpponentsPiece(targetCellPiece))) {
                 possibleMoves.insert(targetPosition);
             }
 
             targetPosition = currentPosition + Vector2(-1, -2);
-            if (targetPosition.x >= 0 && targetPosition.y >= 0
+            if (isValidPosition(targetPosition)
                 && ((targetCellPiece = _cells[targetPosition.x][targetPosition.y]->getPiece()).get() == nullptr
                     || piece->isOpponentsPiece(targetCellPiece))) {
                 possibleMoves.insert(targetPosition);
             }
 
             targetPosition = currentPosition + Vector2(-2, -1);
-            if (targetPosition.x >= 0 && targetPosition.y >= 0
+            if (isValidPosition(targetPosition)
                 && ((targetCellPiece = _cells[targetPosition.x][targetPosition.y]->getPiece()).get() == nullptr
                     || piece->isOpponentsPiece(targetCellPiece))) {
                 possibleMoves.insert(targetPosition);
             }
 
             targetPosition = currentPosition + Vector2(2, -1);
-            if (targetPosition.x < 8 && targetPosition.y >= 0
+            if (isValidPosition(targetPosition)
                 && ((targetCellPiece = _cells[targetPosition.x][targetPosition.y]->getPiece()).get() == nullptr
                     || piece->isOpponentsPiece(targetCellPiece))) {
                 possibleMoves.insert(targetPosition);
             }
 
             targetPosition = currentPosition + Vector2(1, -2);
-            if (targetPosition.x < 8 && targetPosition.y >= 0
+            if (isValidPosition(targetPosition)
                 && ((targetCellPiece = _cells[targetPosition.x][targetPosition.y]->getPiece()).get() == nullptr
                     || piece->isOpponentsPiece(targetCellPiece))) {
                 possibleMoves.insert(targetPosition);
             }
+            //endregion
         }
         else if (piece->getType() == PieceType::King)
         {
+            //region King
             for (int i = -1; i < 2; ++i)
                 for (int j = -1; j < 2; ++j)
                 {
                     targetPosition = currentPosition + Vector2(i, j);
-                    if (targetPosition.x >= 0 && targetPosition.x < 8
-                            && targetPosition.y >= 0 && targetPosition.y < 8
+                    if (isValidPosition(targetPosition)
                             && ((targetCellPiece = _cells[targetPosition.x][targetPosition.y]->getPiece()).get() == nullptr
                                 || piece->isOpponentsPiece(targetCellPiece)))
                         possibleMoves.insert(targetPosition);
                 }
+            //endregion
         }
         else if (piece->getType() == PieceType::Rook)
         {
+            //region Rook
             // Checking vertical line up
             for (int i = 1; i < 8; ++i)
             {
                 targetPosition = currentPosition + Vector2(i, 0);
-                if (targetPosition.x >= 0 && targetPosition.x < 8
-                        && targetPosition.y >= 0 && targetPosition.y < 8
+                if (isValidPosition(targetPosition)
                         && ((targetCellPiece = _cells[targetPosition.x][targetPosition.y]->getPiece()).get() == nullptr
                             || piece->isOpponentsPiece(targetCellPiece)))
-                {
                     possibleMoves.insert(targetPosition);
-                    // Stop iteration if there is an obstacle to go further
-                    if (targetCellPiece.get() != nullptr) break;
-                }
+                // Stop iteration if there is an obstacle to go further
+                if (isValidPosition(targetPosition) && targetCellPiece.get() != nullptr) break;
             }
             // Checking vertical line down
             for (int i = -1; i > -8; --i)
             {
                 targetPosition = currentPosition + Vector2(i, 0);
-                if (targetPosition.x >= 0 && targetPosition.x < 8
-                    && targetPosition.y >= 0 && targetPosition.y < 8
+                if (isValidPosition(targetPosition)
                     && ((targetCellPiece = _cells[targetPosition.x][targetPosition.y]->getPiece()).get() == nullptr
                         || piece->isOpponentsPiece(targetCellPiece)))
-                {
                     possibleMoves.insert(targetPosition);
-                    // Stop iteration if there is an obstacle to go further
-                    if (targetCellPiece.get() != nullptr) break;
-                }
+                // Stop iteration if there is an obstacle to go further
+                if (isValidPosition(targetPosition) && targetCellPiece.get() != nullptr) break;
             }
             // Checking horizontal line to the right
             for (int j = 1; j < 8; ++j)
             {
                 targetPosition = currentPosition + Vector2(0, j);
-                if (targetPosition.x >= 0 && targetPosition.x < 8
-                    && targetPosition.y >= 0 && targetPosition.y < 8
+                if (isValidPosition(targetPosition)
                     && ((targetCellPiece = _cells[targetPosition.x][targetPosition.y]->getPiece()).get() == nullptr
                         || piece->isOpponentsPiece(targetCellPiece)))
-                {
                     possibleMoves.insert(targetPosition);
-                    // Stop iteration if there is an obstacle to go further
-                    if (targetCellPiece.get() != nullptr) break;
-                }
+                // Stop iteration if there is an obstacle to go further
+                if (isValidPosition(targetPosition) && targetCellPiece.get() != nullptr) break;
             }
             // Checking horizontal line to the left
             for (int j = -1; j > -8; --j)
             {
                 targetPosition = currentPosition + Vector2(0, j);
-                if (targetPosition.x >= 0 && targetPosition.x < 8
-                    && targetPosition.y >= 0 && targetPosition.y < 8
+                if (isValidPosition(targetPosition)
                     && ((targetCellPiece = _cells[targetPosition.x][targetPosition.y]->getPiece()).get() == nullptr
                         || piece->isOpponentsPiece(targetCellPiece)))
-                {
                     possibleMoves.insert(targetPosition);
-                    // Stop iteration if there is an obstacle to go further
-                    if (targetCellPiece.get() != nullptr) break;
-                }
+                // Stop iteration if there is an obstacle to go further
+                if (isValidPosition(targetPosition) && targetCellPiece.get() != nullptr) break;
             }
+            //endregion
         }
         else if (piece->getType() == PieceType::Bishop)
         {
+            //region Bishop
             bool to_break = false;
             // Checking top-right diagonal
             for (int i = 1; i < 8; ++i)
@@ -313,18 +251,16 @@ public:
                     else
                     {
                         targetPosition = currentPosition + Vector2(i, j);
-                        if (targetPosition.x >= 0 && targetPosition.x < 8
-                            && targetPosition.y >= 0 && targetPosition.y < 8
+                        if (isValidPosition(targetPosition)
                             &&
                             ((targetCellPiece = _cells[targetPosition.x][targetPosition.y]->getPiece()).get() == nullptr
-                             || piece->isOpponentsPiece(targetCellPiece))) {
+                             || piece->isOpponentsPiece(targetCellPiece)))
                             possibleMoves.insert(targetPosition);
                             // Stop iteration if there is an obstacle to go further
-                            if (targetCellPiece.get() != nullptr)
-                            {
-                                to_break = true;
-                                break;
-                            }
+                        if (isValidPosition(targetPosition) && targetCellPiece.get() != nullptr)
+                        {
+                            to_break = true;
+                            break;
                         }
                     }
                 }
@@ -340,18 +276,16 @@ public:
                     else
                     {
                         targetPosition = currentPosition + Vector2(i, j);
-                        if (targetPosition.x >= 0 && targetPosition.x < 8
-                            && targetPosition.y >= 0 && targetPosition.y < 8
+                        if (isValidPosition(targetPosition)
                             &&
                             ((targetCellPiece = _cells[targetPosition.x][targetPosition.y]->getPiece()).get() == nullptr
-                             || piece->isOpponentsPiece(targetCellPiece))) {
+                             || piece->isOpponentsPiece(targetCellPiece)))
                             possibleMoves.insert(targetPosition);
                             // Stop iteration if there is an obstacle to go further
-                            if (targetCellPiece.get() != nullptr)
-                            {
-                                to_break = true;
-                                break;
-                            }
+                        if (isValidPosition(targetPosition) && targetCellPiece.get() != nullptr)
+                        {
+                            to_break = true;
+                            break;
                         }
                     }
                 }
@@ -367,19 +301,18 @@ public:
                     else
                     {
                         targetPosition = currentPosition + Vector2(i, j);
-                        if (targetPosition.x >= 0 && targetPosition.x < 8
-                            && targetPosition.y >= 0 && targetPosition.y < 8
+                        if (isValidPosition(targetPosition)
                             &&
                             ((targetCellPiece = _cells[targetPosition.x][targetPosition.y]->getPiece()).get() == nullptr
-                             || piece->isOpponentsPiece(targetCellPiece))) {
+                             || piece->isOpponentsPiece(targetCellPiece)))
                             possibleMoves.insert(targetPosition);
-                            // Stop iteration if there is an obstacle to go further
-                            if (targetCellPiece.get() != nullptr)
-                            {
-                                to_break = true;
-                                break;
-                            }
+                        // Stop iteration if there is an obstacle to go further
+                        if (isValidPosition(targetPosition) && targetCellPiece.get() != nullptr)
+                        {
+                            to_break = true;
+                            break;
                         }
+
                     }
                 }
                 if (to_break) break;
@@ -394,34 +327,264 @@ public:
                     else
                     {
                         targetPosition = currentPosition + Vector2(i, j);
-                        if (targetPosition.x >= 0 && targetPosition.x < 8
-                            && targetPosition.y >= 0 && targetPosition.y < 8
+                        if (isValidPosition(targetPosition)
                             &&
                             ((targetCellPiece = _cells[targetPosition.x][targetPosition.y]->getPiece()).get() == nullptr
-                             || piece->isOpponentsPiece(targetCellPiece))) {
+                             || piece->isOpponentsPiece(targetCellPiece)))
                             possibleMoves.insert(targetPosition);
-                            // Stop iteration if there is an obstacle to go further
-                            if (targetCellPiece.get() != nullptr)
-                            {
-                                to_break = true;
-                                break;
-                            }
+                        // Stop iteration if there is an obstacle to go further
+                        if (isValidPosition(targetPosition) && targetCellPiece.get() != nullptr)
+                        {
+                            to_break = true;
+                            break;
                         }
                     }
                 }
                 if (to_break) break;
             }
+            //endregion
         }
-        return possibleMoves;
+        else if (piece->getType() == PieceType::Queen)
+        {
+            //region Queen
+            // Checking vertical line up
+            for (int i = 1; i < 8; ++i)
+            {
+                targetPosition = currentPosition + Vector2(i, 0);
+                if (isValidPosition(targetPosition)
+                    && ((targetCellPiece = _cells[targetPosition.x][targetPosition.y]->getPiece()).get() == nullptr
+                        || piece->isOpponentsPiece(targetCellPiece)))
+                    possibleMoves.insert(targetPosition);
+                // Stop iteration if there is an obstacle to go further
+                if (isValidPosition(targetPosition) && targetCellPiece.get() != nullptr) break;
+            }
+            // Checking vertical line down
+            for (int i = -1; i > -8; --i)
+            {
+                targetPosition = currentPosition + Vector2(i, 0);
+                if (isValidPosition(targetPosition)
+                    && ((targetCellPiece = _cells[targetPosition.x][targetPosition.y]->getPiece()).get() == nullptr
+                        || piece->isOpponentsPiece(targetCellPiece)))
+                    possibleMoves.insert(targetPosition);
+                // Stop iteration if there is an obstacle to go further
+                if (isValidPosition(targetPosition) && targetCellPiece.get() != nullptr) break;
+            }
+            // Checking horizontal line to the right
+            for (int j = 1; j < 8; ++j)
+            {
+                targetPosition = currentPosition + Vector2(0, j);
+                if (isValidPosition(targetPosition)
+                    && ((targetCellPiece = _cells[targetPosition.x][targetPosition.y]->getPiece()).get() == nullptr
+                        || piece->isOpponentsPiece(targetCellPiece)))
+                    possibleMoves.insert(targetPosition);
+                // Stop iteration if there is an obstacle to go further
+                if (isValidPosition(targetPosition) && targetCellPiece.get() != nullptr) break;
+            }
+            // Checking horizontal line to the left
+            for (int j = -1; j > -8; --j)
+            {
+                targetPosition = currentPosition + Vector2(0, j);
+                if (isValidPosition(targetPosition)
+                    && ((targetCellPiece = _cells[targetPosition.x][targetPosition.y]->getPiece()).get() == nullptr
+                        || piece->isOpponentsPiece(targetCellPiece)))
+                    possibleMoves.insert(targetPosition);
+                // Stop iteration if there is an obstacle to go further
+                if (isValidPosition(targetPosition) && targetCellPiece.get() != nullptr) break;
+            }
+            bool to_break = false;
+            // Checking top-right diagonal
+            for (int i = 1; i < 8; ++i)
+            {
+                for (int j = 1; j < 8; ++j)
+                {
+                    if (i != j) continue;
+                    else
+                    {
+                        targetPosition = currentPosition + Vector2(i, j);
+                        if (isValidPosition(targetPosition)
+                            &&
+                            ((targetCellPiece = _cells[targetPosition.x][targetPosition.y]->getPiece()).get() == nullptr
+                             || piece->isOpponentsPiece(targetCellPiece)))
+                            possibleMoves.insert(targetPosition);
+                        // Stop iteration if there is an obstacle to go further
+                        if (isValidPosition(targetPosition) && targetCellPiece.get() != nullptr)
+                        {
+                            to_break = true;
+                            break;
+                        }
+                    }
+                }
+                if (to_break) break;
+            }
+            to_break = false;
+            // Checking bottom-right diagonal
+            for (int i = -1; i > -8; --i)
+            {
+                for (int j = 1; j < 8; ++j)
+                {
+                    if (abs(i) != j) continue;
+                    else
+                    {
+                        targetPosition = currentPosition + Vector2(i, j);
+                        if (isValidPosition(targetPosition)
+                            &&
+                            ((targetCellPiece = _cells[targetPosition.x][targetPosition.y]->getPiece()).get() == nullptr
+                             || piece->isOpponentsPiece(targetCellPiece)))
+                            possibleMoves.insert(targetPosition);
+                        // Stop iteration if there is an obstacle to go further
+                        if (isValidPosition(targetPosition) && targetCellPiece.get() != nullptr)
+                        {
+                            to_break = true;
+                            break;
+                        }
+                    }
+                }
+                if (to_break) break;
+            }
+            to_break = false;
+            // Checking bottom-left diagonal
+            for (int i = -1; i > -8; --i)
+            {
+                for (int j = -1; j > -8; --j)
+                {
+                    if (i != j) continue;
+                    else
+                    {
+                        targetPosition = currentPosition + Vector2(i, j);
+                        if (isValidPosition(targetPosition)
+                            &&
+                            ((targetCellPiece = _cells[targetPosition.x][targetPosition.y]->getPiece()).get() == nullptr
+                             || piece->isOpponentsPiece(targetCellPiece)))
+                            possibleMoves.insert(targetPosition);
+                        // Stop iteration if there is an obstacle to go further
+                        if (isValidPosition(targetPosition) && targetCellPiece.get() != nullptr)
+                        {
+                            to_break = true;
+                            break;
+                        }
+
+                    }
+                }
+                if (to_break) break;
+            }
+            to_break = false;
+            // Checking top-left diagonal
+            for (int i = 1; i < 8; ++i)
+            {
+                for (int j = -1; j > -8; --j)
+                {
+                    if (i != abs(j)) continue;
+                    else
+                    {
+                        targetPosition = currentPosition + Vector2(i, j);
+                        if (isValidPosition(targetPosition)
+                            &&
+                            ((targetCellPiece = _cells[targetPosition.x][targetPosition.y]->getPiece()).get() == nullptr
+                             || piece->isOpponentsPiece(targetCellPiece)))
+                            possibleMoves.insert(targetPosition);
+                        // Stop iteration if there is an obstacle to go further
+                        if (isValidPosition(targetPosition) && targetCellPiece.get() != nullptr)
+                        {
+                            to_break = true;
+                            break;
+                        }
+                    }
+                }
+                if (to_break) break;
+            }
+            //endregion
+        }
+        piece->setPossibleMoves(possibleMoves);
+        return piece->getPossibleMoves();
     }
 
 private:
     std::array<std::array<spCell, 8>, 8> _cells = {};
-    std::set<const Piece*> _whites;
-    std::set<const Piece*> _blacks;
     bool _isWhitesTurn = true;
+    std::deque<spPiece> _eaten;
     spCell _source = nullptr;
     spCell _target = nullptr;
+
+    void clickEventHandler(Event* ev)
+    {
+        spCell clickedCell = safeCast<Cell*>(ev->currentTarget.get());
+
+        if (_source.get() == nullptr && clickedCell->getPiece().get() != nullptr)
+        {
+            // Protection from moving opponent's pieces
+            if ((_isWhitesTurn && !clickedCell->getPiece()->isWhite())
+                || (!_isWhitesTurn && clickedCell->getPiece()->isWhite()))
+                return;
+
+            _source = clickedCell;
+            _source->setColor(Color::LawnGreen);
+
+            auto result = getPossibleMoves(_source);
+            log::messageln("Found %d potential moves", result.size());
+            for (auto move : result)
+            {
+                log::messageln("Move: {%f %f}", move.x, move.y);
+                _cells[move.x][move.y]->setColor(Color::Orange);
+            }
+        }
+        else if (_source.get() != nullptr && _source == clickedCell)
+        {
+            for (auto move : getPossibleMoves(_source))
+                _cells[move.x][move.y]->resetColor();
+
+            _source->resetColor();
+            if (_source->getPiece().get() != nullptr) _source->getPiece()->resetMoves();
+            _source = nullptr;
+        }
+        else if (_source.get() != nullptr && clickedCell->getPiece().get() != nullptr
+                 && clickedCell->getPiece()->isWhite() == _source->getPiece()->isWhite())
+        {
+            for (auto move : getPossibleMoves(_source))
+                _cells[move.x][move.y]->resetColor();
+
+            _source->resetColor();
+            if (_source->getPiece().get() != nullptr) _source->getPiece()->resetMoves();
+            _source = clickedCell;
+            _source->setColor(Color::LawnGreen);
+
+            for (auto move : getPossibleMoves(_source))
+                _cells[move.x][move.y]->setColor(Color::Orange);
+        }
+        else if (_source.get() != nullptr && _source != clickedCell
+                 && getPossibleMoves(_source).find(clickedCell->getCBPosition()) != getPossibleMoves(_source).end())
+        {
+            if (_target.get() != nullptr) _target->resetColor();
+            _target = clickedCell;
+
+            spPiece piece = _source->getPiece();
+            piece->detach();
+
+            if (_target->getPiece().get() != nullptr)
+            {
+                _eaten.push_front(_target->getPiece());
+                _target->getPiece()->detach();
+            }
+
+            piece->attachTo(_target);
+            _target->setPiece(_source->getPiece());
+
+            for (auto move : getPossibleMoves(_source))
+                _cells[move.x][move.y]->resetColor();
+
+            if (_source->getPiece().get() != nullptr) _source->getPiece()->resetMoves();
+            _source->setPiece(nullptr);
+            _source->resetColor();
+            _target->setColor(Color::Cyan);
+
+            _source = nullptr;
+            _isWhitesTurn = !_isWhitesTurn;
+        }
+    }
+
+    bool isValidPosition(const Vector2& position)
+    {
+        return position.x >= 0 && position.x < 8 && position.y >= 0 && position.y < 8;
+    }
 };
 
 DECLARE_SMART(Chessboard, spChessboard)

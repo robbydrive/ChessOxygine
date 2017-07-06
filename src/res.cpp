@@ -6,7 +6,7 @@ namespace res
 
     void load()
     {
-        ui.loadXML("res.xml");
+        ui.loadXML("data/res.xml");
     }
 
     void free()

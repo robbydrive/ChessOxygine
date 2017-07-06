@@ -17,4 +17,3 @@ bool Piece::isOpponentsPiece(const spPiece otherPiece) const
     if (otherPiece.get() == nullptr) return false;
     return (_isWhite && !otherPiece->isWhite()) || (!isWhite() && otherPiece->isWhite());
 }
-

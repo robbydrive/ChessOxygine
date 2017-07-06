@@ -13,6 +13,18 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OXYGINE_CXX_FLAGS}")
 add_executable(Chess ../src/main.cpp ../src/Piece.cpp ../src/Piece.h ../src/res.cpp ../src/res.h ../src/Cell.cpp ../src/Cell.h ../src/Chessboard.cpp ../src/Chessboard.h)
 target_link_libraries(Chess ${OXYGINE_CORE_LIBS})
 
+FILE(COPY ../data DESTINATION .)
+#macro(copy_files GLOBPAT DESTINATION)
+#	file(GLOB COPY_FILES RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} ${GLOBPAT})
+#	foreach(FILENAME ${COPY_FILES})
+#		set(SRC "${CMAKE_CURRENT_SOURCE_DIR}/${FILENAME}")
+#		set(DST "${DESTINATION}/${FILENAME}")
+#		add_custom_command(TARGET ${PROJECT_NAME} PRE_BUILD COMMAND ${CMAKE_COMMAND} -E copy ${SRC} ${DST})
+#	endforeach(FILENAME)
+#endmacro(copy_files)
+#
+#set(DATA_FILES_LIST ../data/images ../data/fonts ../data/res.xml)
+#copy_files("${DATA_FILES_LIST}" ${CMAKE_CURRENT_BINARY_DIR})
 
 
 if (WIN32) #disable console mode for VC++
