@@ -53,6 +53,10 @@ public:
                     cell->setPiece(piece);
                     piece->attachTo(cell);
                     piece->setPosition(pieceOffset);
+                    if (piece->getType() == PieceType::King && piece->isWhite())
+                        _whiteKing = cell;
+                    else if (piece->getType() == PieceType::King)
+                        _blackKing = cell;
                 }
                 cell->addEventListener(TouchEvent::CLICK, CLOSURE(this, &Chessboard::clickEventHandler));
                 _cells[i][j] = cell;
@@ -187,6 +191,34 @@ public:
                                 || piece->isOpponentsPiece(targetCellPiece)))
                         possibleMoves.insert(targetPosition);
                 }
+
+            // Checking possibility of castling
+            if (!piece->wasMoved())
+            {
+                spPiece rook;
+                bool noFiguresBetween = true;
+                if ((rook = _cells[cell->getCBPosition().x][0]->getPiece())->getType() == PieceType::Rook
+                        && !rook->wasMoved())
+                    for (int j = 1; j < 4; ++j)
+                        if (_cells[cell->getCBPosition().x][j]->getPiece().get() != nullptr)
+                        {
+                            noFiguresBetween = false;
+                            break;
+                        }
+                    if (noFiguresBetween)
+                        possibleMoves.insert(currentPosition + Vector2(0, -2));
+                noFiguresBetween = true;
+                if ((rook = _cells[cell->getCBPosition().x][7]->getPiece())->getType() == PieceType::Rook
+                        && !rook->wasMoved())
+                    for (int j = 5; j < 7; ++j)
+                        if (_cells[cell->getCBPosition().x][j]->getPiece().get() != nullptr)
+                        {
+                            noFiguresBetween = false;
+                            break;
+                        }
+                    if (noFiguresBetween)
+                        possibleMoves.insert(currentPosition + Vector2(0, 2));
+            }
             //endregion
         }
         else if (piece->getType() == PieceType::Rook)
@@ -494,6 +526,7 @@ public:
             }
             //endregion
         }
+
         piece->setPossibleMoves(possibleMoves);
         return piece->getPossibleMoves();
     }
@@ -504,6 +537,8 @@ private:
     std::deque<spPiece> _eaten;
     spCell _source = nullptr;
     spCell _target = nullptr;
+    spCell _whiteKing;
+    spCell _blackKing;
 
     void clickEventHandler(Event* ev)
     {
@@ -566,7 +601,41 @@ private:
             }
 
             piece->attachTo(_target);
+            piece->setMoved(true);
             _target->setPiece(_source->getPiece());
+
+            if (piece->getType() == PieceType::King && piece->isWhite())
+                _whiteKing = _target;
+            else if (piece->getType() == PieceType::King)
+                _blackKing = _target;
+
+            // Checking whether there was a castling
+            if (_target->getPiece()->getType() == PieceType::King
+                    && _target->getCBPosition() - _source->getCBPosition() == Vector2(0, 2))
+            {
+                spCell rookSource, rookTarget;
+                spPiece rookPiece;
+                rookSource = _cells[_target->getCBPosition().x][7];
+                rookTarget = _cells[_target->getCBPosition().x][5];
+                rookPiece = rookSource->getPiece();
+                rookPiece->detach();
+                rookPiece->attachTo(rookTarget);
+                rookSource->setPiece(nullptr);
+                rookTarget->setPiece(rookPiece);
+            }
+            else if (_target->getPiece()->getType() == PieceType::King
+                        && _target->getCBPosition() - _source->getCBPosition() == Vector2(0, -2))
+            {
+                spCell rookSource, rookTarget;
+                spPiece rookPiece;
+                rookSource = _cells[_target->getCBPosition().x][0];
+                rookTarget = _cells[_target->getCBPosition().x][3];
+                rookPiece = rookSource->getPiece();
+                rookPiece->detach();
+                rookPiece->attachTo(rookTarget);
+                rookSource->setPiece(nullptr);
+                rookTarget->setPiece(rookPiece);
+            }
 
             for (auto move : getPossibleMoves(_source))
                 _cells[move.x][move.y]->resetColor();
@@ -578,8 +647,19 @@ private:
 
             _source = nullptr;
             _isWhitesTurn = !_isWhitesTurn;
+
+            // Checking for a check[mate]
+//            if (_isWhitesTurn
+//                    && getPossibleMoves(_target).find(_whiteKing->getCBPosition()) != getPossibleMoves(_target).end())
+
+
         }
     }
+
+//    void move(spCell source = _source, spCell target = _target)
+//    {
+//
+//    }
 
     bool isValidPosition(const Vector2& position)
     {
@@ -599,9 +679,13 @@ void example_init()
 
     //lets create our client code simple actor
     spChessboard chessboard = new Chessboard;
+//    chessboard->setName("chessboard");
 
     //and add it to Stage as child
     getStage()->addChild(chessboard);
+
+//    log::messageln("Chessboard size = %f %f", getStage()->getChild("chessboard")->getSize().x,
+//                   getStage()->getChild("chessboard")->getSize().y);
 }
 
 

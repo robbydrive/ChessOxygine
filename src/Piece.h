@@ -28,9 +28,12 @@ public:
     const MovesSet& getPossibleMoves() const { return _possibleMoves; }
     void setPossibleMoves(const MovesSet& set) { _possibleMoves = set; }
     void resetMoves() { if (!_possibleMoves.empty()) _possibleMoves.clear(); }
+    bool wasMoved() { return _moved; }
+    void setMoved(bool moved) { _moved = moved; }
 private:
     PieceType _type;
     bool _isWhite;
+    bool _moved;
     MovesSet _possibleMoves = {};
 };
 
