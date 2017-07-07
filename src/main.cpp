@@ -7,7 +7,7 @@
 #include "core/oxygine.h"
 #include "Stage.h"
 #include "DebugActor.h"
-#include "Chessboard.h"
+#include "GameManager.h"
 
 
 using namespace oxygine;
@@ -22,7 +22,7 @@ int mainloop()
     bool done = core::update();
 
     // It gets passed to our example game implementation
-    example_update();
+    game_update();
 
     // Update our stage
     // Update all actors. Actor::update will also be called for all its children
@@ -58,7 +58,7 @@ void run()
 #endif
 
 
-    example_preinit();
+    game_preinit();
     core::init(&desc);
 
 
@@ -68,10 +68,10 @@ void run()
     getStage()->setSize(size);
 
     // DebugActor is a helper actor node. It shows FPS, memory usage and other useful stuff
-    DebugActor::show();
+//    DebugActor::show();
 
     // Initializes our example game. See example.cpp
-    example_init();
+    game_init();
 
 #ifdef EMSCRIPTEN
     /*
@@ -109,7 +109,7 @@ void run()
     */
 
     // See example.cpp for the shutdown function implementation
-    example_destroy();
+    game_destroy();
 
 
     //renderer.cleanup();

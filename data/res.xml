@@ -5,6 +5,7 @@
 		<image file="anim.png" cols = "8" />
 		<image file="button.png"/>
 		<image file="pieces.png" cols = "6" rows = "2" />
+		<image file="yellow_dot.png"/>
 	</atlas>
 	
 	<set path = "data/fonts" />

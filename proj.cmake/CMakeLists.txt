@@ -10,7 +10,7 @@ add_definitions(--std=c++11)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OXYGINE_CXX_FLAGS}")
 
-add_executable(Chess ../src/main.cpp ../src/Piece.cpp ../src/Piece.h ../src/res.cpp ../src/res.h ../src/Cell.cpp ../src/Cell.h ../src/Chessboard.cpp ../src/Chessboard.h)
+add_executable(Chess ../src/main.cpp ../src/Piece.cpp ../src/Piece.h ../src/res.cpp ../src/res.h ../src/Cell.cpp ../src/Cell.h ../src/Chessboard.cpp ../src/Chessboard.h ../src/GameManager.cpp ../src/GameManager.h)
 target_link_libraries(Chess ${OXYGINE_CORE_LIBS})
 
 FILE(COPY ../data DESTINATION .)

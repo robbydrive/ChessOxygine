@@ -14,9 +14,14 @@ public:
 
     void setPiece(const spPiece piece);
 
+    void select();
+    void selectWithColor(Color color);
+    void unSelect();
+    void unSelectWithColor();
     void resetColor();
 private:
     bool _isWhite;
     spPiece _piece = nullptr;
     Vector2 _position;
+    unsigned char _defaultAlpha = 255;
 };
