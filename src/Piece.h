@@ -12,6 +12,8 @@ struct Vector2Cmp
     }
 };
 
+bool vector2Cmp(const Vector2& first, const Vector2& second);
+
 DECLARE_SMART(Piece, spPiece)
 using MovesSet = std::set<Vector2, Vector2Cmp>;
 

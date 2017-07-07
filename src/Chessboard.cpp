@@ -6,6 +6,8 @@
 #include "Chessboard.h"
 using namespace oxygine;
 
+enum Winner { Nobody, Whites, Blacks };
+
 DECLARE_SMART(Cell, spCell)
 
 class Chessboard : public Actor
@@ -71,8 +73,8 @@ public:
     const MovesSet& getPossibleMoves(spCell cell)
     {
         spPiece piece = cell->getPiece();
-        if (piece->getPossibleMoves().size() > 0)
-            return piece->getPossibleMoves();
+//        if (piece->getPossibleMoves().size() > 0)
+//            return piece->getPossibleMoves();
         const Vector2& currentPosition = cell->getCBPosition();
         Vector2 targetPosition;
         spPiece targetCellPiece;
@@ -82,8 +84,6 @@ public:
             //region Pawn
             if (piece->isWhite())
             {
-                log::messageln("White");
-                log::messageln("cPosition: %f %f", currentPosition.x, currentPosition.y);
                 if (currentPosition.x != 7
                         && _cells[currentPosition.x + 1][currentPosition.y]->getPiece().get() == nullptr)
                 {
@@ -101,7 +101,6 @@ public:
             }
             else
             {
-                log::messageln("Black");
                 if (currentPosition.x != 0
                         && _cells[currentPosition.x - 1][currentPosition.y]->getPiece().get() == nullptr)
                 {
@@ -539,9 +538,13 @@ private:
     spCell _target = nullptr;
     spCell _whiteKing;
     spCell _blackKing;
+    bool _isCheck = false;
+    Winner _winner = Winner::Nobody;
 
     void clickEventHandler(Event* ev)
     {
+        // Block users interaction if checkmate
+        if (_winner != Winner::Nobody) return;
         spCell clickedCell = safeCast<Cell*>(ev->currentTarget.get());
 
         if (_source.get() == nullptr && clickedCell->getPiece().get() != nullptr)
@@ -554,11 +557,8 @@ private:
             _source = clickedCell;
             _source->setColor(Color::LawnGreen);
 
-            auto result = getPossibleMoves(_source);
-            log::messageln("Found %d potential moves", result.size());
-            for (auto move : result)
+            for (auto move : getPossibleMoves(_source))
             {
-                log::messageln("Move: {%f %f}", move.x, move.y);
                 _cells[move.x][move.y]->setColor(Color::Orange);
             }
         }
@@ -588,82 +588,222 @@ private:
         else if (_source.get() != nullptr && _source != clickedCell
                  && getPossibleMoves(_source).find(clickedCell->getCBPosition()) != getPossibleMoves(_source).end())
         {
+            // Deleting trace to previous move
             if (_target.get() != nullptr) _target->resetColor();
             _target = clickedCell;
 
-            spPiece piece = _source->getPiece();
-            piece->detach();
+            // Resetting color for cells selected as possible moves
+            for (auto possibleMove : getPossibleMoves(_source))
+                _cells[possibleMove.x][possibleMove.y]->resetColor();
 
-            if (_target->getPiece().get() != nullptr)
-            {
-                _eaten.push_front(_target->getPiece());
-                _target->getPiece()->detach();
-            }
+            // Resetting set of possible moves
+            if (_source->getPiece().get() != nullptr) _source->getPiece()->resetMoves();
 
-            piece->attachTo(_target);
-            piece->setMoved(true);
-            _target->setPiece(_source->getPiece());
-
-            if (piece->getType() == PieceType::King && piece->isWhite())
-                _whiteKing = _target;
-            else if (piece->getType() == PieceType::King)
-                _blackKing = _target;
+            move(_source, _target);
+            _source->resetColor();
+            _target->setColor(Color::Cyan);
 
             // Checking whether there was a castling
             if (_target->getPiece()->getType() == PieceType::King
                     && _target->getCBPosition() - _source->getCBPosition() == Vector2(0, 2))
             {
                 spCell rookSource, rookTarget;
-                spPiece rookPiece;
                 rookSource = _cells[_target->getCBPosition().x][7];
                 rookTarget = _cells[_target->getCBPosition().x][5];
-                rookPiece = rookSource->getPiece();
-                rookPiece->detach();
-                rookPiece->attachTo(rookTarget);
-                rookSource->setPiece(nullptr);
-                rookTarget->setPiece(rookPiece);
+                move(rookSource, rookTarget);
             }
             else if (_target->getPiece()->getType() == PieceType::King
                         && _target->getCBPosition() - _source->getCBPosition() == Vector2(0, -2))
             {
                 spCell rookSource, rookTarget;
-                spPiece rookPiece;
                 rookSource = _cells[_target->getCBPosition().x][0];
                 rookTarget = _cells[_target->getCBPosition().x][3];
-                rookPiece = rookSource->getPiece();
-                rookPiece->detach();
-                rookPiece->attachTo(rookTarget);
-                rookSource->setPiece(nullptr);
-                rookTarget->setPiece(rookPiece);
+                move(rookSource, rookTarget);
             }
-
-            for (auto move : getPossibleMoves(_source))
-                _cells[move.x][move.y]->resetColor();
-
-            if (_source->getPiece().get() != nullptr) _source->getPiece()->resetMoves();
-            _source->setPiece(nullptr);
-            _source->resetColor();
-            _target->setColor(Color::Cyan);
 
             _source = nullptr;
             _isWhitesTurn = !_isWhitesTurn;
+            _isCheck = false;
 
             // Checking for a check[mate]
-//            if (_isWhitesTurn
-//                    && getPossibleMoves(_target).find(_whiteKing->getCBPosition()) != getPossibleMoves(_target).end())
-
-
+            checkMate();
         }
     }
 
-//    void move(spCell source = _source, spCell target = _target)
-//    {
-//
-//    }
+    void move(spCell source, spCell target)
+    {
+        spPiece piece = source->getPiece();
+        piece->detach();
+
+        if (target->getPiece().get() != nullptr)
+        {
+            _eaten.push_front(target->getPiece());
+            target->getPiece()->detach();
+        }
+
+        piece->attachTo(target);
+        piece->setMoved(true);
+        target->setPiece(source->getPiece());
+        source->setPiece(nullptr);
+
+        if (piece->getType() == PieceType::King && piece->isWhite())
+            _whiteKing = target;
+        else if (piece->getType() == PieceType::King)
+            _blackKing = target;
+    }
+
+    void checkMate()
+    {
+        bool isWhiteThreatened = false, isBlackThreatened = false;
+        spCell currentCell;
+        for (int i = 0; i < 8; ++i)
+            for (int j = 0; j < 8; ++j)
+            {
+                if ((currentCell = _cells[i][j])->getPiece().get() != nullptr
+                    && currentCell->getPiece()->isWhite()
+                    && getPossibleMoves(currentCell).find(_blackKing->getCBPosition())
+                       != getPossibleMoves(currentCell).end())
+                    isBlackThreatened = true;
+                else if ((currentCell = _cells[i][j])->getPiece().get() != nullptr
+                         && !currentCell->getPiece()->isWhite()
+                         && getPossibleMoves(currentCell).find(_whiteKing->getCBPosition())
+                            != getPossibleMoves(currentCell).end())
+                    isWhiteThreatened = true;
+            }
+        if (_isWhitesTurn && isBlackThreatened)
+            _winner = Winner::Whites;
+        else if (!_isWhitesTurn && isWhiteThreatened)
+            _winner = Winner::Blacks;
+        else if (_isWhitesTurn && isWhiteThreatened)
+        {
+            MovesSet blackMoves, threatMoves = cellsBetween(_target, _whiteKing);
+            for (int i = 0; i < 8 && !_isCheck; ++i)
+            {
+                for (int j = 0; j < 8 && !_isCheck; ++j)
+                {
+                    if ((currentCell = _cells[i][j])->getPiece().get() == nullptr)
+                        continue;
+                    if (!currentCell->getPiece()->isWhite())
+                    {
+                        blackMoves.insert(getPossibleMoves(currentCell).begin(),
+                                          getPossibleMoves(currentCell).end());
+                        currentCell->getPiece()->resetMoves();
+                        continue;
+                    }
+                    MovesSet intersResult, possibleMoves = getPossibleMoves(currentCell);
+                    currentCell->getPiece()->resetMoves();
+                    std::set_intersection(possibleMoves.begin(), possibleMoves.end(),
+                                          threatMoves.begin(), threatMoves.end(),
+                                          std::inserter(intersResult, intersResult.begin()), vector2Cmp);
+                    // If white figure can eat a threat or cover the king from it, it is not a checkmate
+                    if (possibleMoves.find(_target->getCBPosition()) != possibleMoves.end()
+                        || intersResult.size() > 0)
+                    {
+                        currentCell->setColor(Color::Red);
+                        _isCheck = true;
+                        break;
+                    }
+                }
+            }
+            MovesSet differResult;
+            std::set_difference(getPossibleMoves(_whiteKing).begin(),
+                                getPossibleMoves(_whiteKing).end(),
+                                blackMoves.begin(), blackMoves.end(),
+                                std::inserter(differResult, differResult.begin()), vector2Cmp);
+            // If the king can go away from black figures' possible moves, it is not a checkmate
+            if (!_isCheck && differResult.size() > 0)
+                _isCheck = true;
+            else if (!_isCheck)
+                _winner = Winner::Blacks;
+        }
+        else if (!_isWhitesTurn && isBlackThreatened)
+        {
+            MovesSet whiteMoves, threatMoves = cellsBetween(_target, _blackKing);
+            for (int i = 0; i < 8 && !_isCheck; ++i)
+            {
+                for (int j = 0; j < 8 && !_isCheck; ++j)
+                {
+                    if ((currentCell = _cells[i][j])->getPiece().get() == nullptr)
+                        continue;
+                    if (currentCell->getPiece()->isWhite())
+                    {
+                        whiteMoves.insert(getPossibleMoves(currentCell).begin(),
+                                          getPossibleMoves(currentCell).end());
+                        currentCell->getPiece()->resetMoves();
+                        continue;
+                    }
+                    MovesSet intersResult, possibleMoves = getPossibleMoves(currentCell);
+                    currentCell->getPiece()->resetMoves();
+                    std::set_intersection(possibleMoves.begin(), possibleMoves.end(),
+                                          threatMoves.begin(), threatMoves.end(),
+                                          std::inserter(intersResult, intersResult.begin()), vector2Cmp);
+                    // If black figure can eat a threat or cover the king from it, it is not a checkmate
+                    if (possibleMoves.find(_target->getCBPosition()) != possibleMoves.end()
+                        || (intersResult.size() > 0 && currentCell->getPiece()->getType() != PieceType::King))
+                    {
+                        currentCell->setColor(Color::Red);
+                        _isCheck = true;
+                        break;
+                    }
+                }
+            }
+            MovesSet differResult;
+            std::set_difference(getPossibleMoves(_whiteKing).begin(),
+                                getPossibleMoves(_whiteKing).end(),
+                                whiteMoves.begin(), whiteMoves.end(),
+                                std::inserter(differResult, differResult.begin()), vector2Cmp);
+            // If the king can go away from white figures' possible moves, it is not a checkmate
+            if (!_isCheck && differResult.size() > 0)
+                _isCheck = true;
+            else if (!_isCheck)
+                _winner = Winner::Whites;
+        }
+        if (_winner != Winner::Nobody)
+            log::messageln("%s won", _winner == Winner::Whites ? "Whites" : "Blacks");
+        else if (_isCheck)
+            log::messageln("Check from %s", isWhiteThreatened ? "Blacks" : "Whites");
+    }
 
     bool isValidPosition(const Vector2& position)
     {
         return position.x >= 0 && position.x < 8 && position.y >= 0 && position.y < 8;
+    }
+
+    MovesSet cellsBetween(spCell cell1, spCell cell2)
+    {
+        MovesSet result = {};
+        // On the same line
+        if (cell1->getCBPosition().x == cell2->getCBPosition().x)
+        {
+            for (int j = std::min(cell1->getCBPosition().y, cell2->getCBPosition().y) + 1;
+                    j < std::max(cell1->getCBPosition().y, cell2->getCBPosition().y); ++j)
+                result.insert(Vector2(cell1->getCBPosition().x, j));
+        }
+        // In the same column
+        else if (cell1->getCBPosition().y == cell2->getCBPosition().y)
+        {
+            for (int i = std::min(cell1->getCBPosition().x, cell2->getCBPosition().x) + 1;
+                 i < std::max(cell1->getCBPosition().x, cell2->getCBPosition().x); ++i)
+                result.insert(Vector2(i, cell1->getCBPosition().y));
+        }
+        // On the diagonal
+        else if (abs(cell1->getCBPosition().x - cell2->getCBPosition().x)
+                 == abs(cell1->getCBPosition().y - cell2->getCBPosition().y))
+        {
+            int incI, incJ, startI, startJ;
+            incI = cell1->getCBPosition().x - cell2->getCBPosition().x > 0 ? -1 : 1;
+            incJ = cell1->getCBPosition().y - cell2->getCBPosition().y > 0 ? -1 : 1;
+            startI = cell1->getCBPosition().x - cell2->getCBPosition().x > 0 ?
+                     cell1->getCBPosition().x - 1 : cell1->getCBPosition().x + 1;
+            startJ = cell1->getCBPosition().y - cell2->getCBPosition().y > 0 ?
+                     cell1->getCBPosition().y - 1 : cell1->getCBPosition().y + 1;
+            for (int i = startI, j = startJ; i < std::max(cell1->getCBPosition().x, cell2->getCBPosition().x)
+                 && i > std::min(cell1->getCBPosition().x, cell2->getCBPosition().x)
+                 && j > std::min(cell1->getCBPosition().y, cell2->getCBPosition().y)
+                 && j < std::max(cell1->getCBPosition().y, cell2->getCBPosition().y); i += incI, j += incJ)
+                result.insert(Vector2(i, j));
+        }
+        return result;
     }
 };
 

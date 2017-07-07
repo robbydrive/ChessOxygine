@@ -1,6 +1,5 @@
 #include "oxygine-framework.h"
 #include "Cell.h"
-#include "Piece.h"
 
 using namespace oxygine;
 

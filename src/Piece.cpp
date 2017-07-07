@@ -5,6 +5,12 @@
 
 using namespace oxygine;
 
+bool vector2Cmp(const Vector2& first, const Vector2& second)
+{
+    if (first.x != second.x) return first.x < second.x;
+    return first.y < second.y;
+}
+
 Piece::Piece(PieceType type, bool isWhite)
     : Sprite(), _type(type), _isWhite(isWhite)
 {
